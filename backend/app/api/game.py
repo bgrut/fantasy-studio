@@ -5038,6 +5038,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
         if _venue and _re3.search(r"\b(antarctic\w*|arctic|polar|south pole|north pole|ice shelf|penguins?|mcmurdo|svalbard|greenland|halley|weather balloons?)\b", _pl) \
                 and not _re3.search(r"\b(inside|indoors?|interior)\b", _pl):
             _venue = None
+        # (2026-11-13) a station held against attackers is held from outside: "a ranger defends the research station
+        # from wolves" stood in a lab room with the station built in it. The runtime builds the defended station
+        try:
+            from app.game_export.extractor import TD_WORDS as _TDW3
+            if _venue and _re3.search(_TDW3, _pl) and not _re3.search(r"\b(inside|indoors?|interior)\b", _pl):
+                _venue = None
+        except Exception:
+            pass
         # A CLOCK TOWER IS CLIMBED FROM INSIDE (2026-10-27): "a clockmaker climbing inside a great clock
         # tower to mend the gears before midnight" walked a torchlit dungeon. A clock tower that is climbed,
         # wound or mended is its own shaft of stairs round a pendulum, the clock room at the top
@@ -5221,6 +5229,14 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # (2026-10-27) and a polar station is the runtime's base on the ice (POLARBASE), not a warehouse door
             if _sm and _sm.group(1) in ("station", "lab", "laboratory", "bunker") and _re3.search(r"\b(antarctic\w*|arctic|polar|south pole|north pole|ice shelf|penguins?|mcmurdo|svalbard|greenland|halley)\b", _pl):
                 _sm = None
+            # (2026-11-13) and the station a defence holds is the runtime's field station at the goal, not a warehouse door
+            if _sm and _sm.group(1) == "station":
+                try:
+                    from app.game_export.extractor import TD_WORDS as _TDW4
+                    if _re3.search(_TDW4, _pl):
+                        _sm = None
+                except Exception:
+                    pass
             # (2026-11-04) outside a jungle or the East a shrine is small, what someone built beside a path
             # (the runtime's wayside chapel at the goal), not a monument you walk into
             if _sm and _sm.group(1) == "shrine" and not _re3.search(

@@ -246,7 +246,12 @@ TD_WORDS = (r"\btower[\s-]?defen[cs]e\b"
             r"|\b(?:build|builds|building|place|places|placing|raise|raises|raising|put|set\s+up)\s+"
             r"(?:\w+\s+){0,2}(?:towers?|turrets?|cannons?|ballistas?|defen[cs]es)\b"
             r"|\bdefend\s+(?:the|our|my|a|your)\s+(?:\w+\s+)?(?:base|castle|keep|village|fort|fortress|gate|walls?|"
-            r"kingdom|town|tower|outpost|camp|citadel|farm|city)\b")
+            r"kingdom|town|tower|outpost|camp|citadel|farm|city)\b"
+            # (2026-11-13) "a retired astronaut defends the station from goblins" read as kill ten goblins on a bare
+            # plain: a hero who defends or protects a PLACE from something is holding it against waves
+            r"|\b(?:defends|defending|protects|protecting|defend|protect)\s+(?:the|our|my|a|your|his|her|their)\s+(?:\w+\s+){0,2}"
+            r"(?:station|lighthouse|outpost|base|camp|cabin|farmhouse|homestead|hut|shrine|temple|village|fort|castle|keep|colony|settlement)"
+            r"\s+(?:from|against)\b")
 # MYSTERY (2026-09-29). A whodunit names itself by its deduction: suspects to
 # question, a culprit to name, a murder to solve. A killer whale or a mysterious
 # forest is not one; "suspects", "who killed", "name the killer" are.
@@ -263,8 +268,9 @@ CITY_WORDS = (r"\bcity[\s-]?build(?:er|ing)\b|\btown[\s-]?build(?:er|ing)\b|\bsi
               r"|\b(?:grow|grows|growing)\s+(?:the\s+|a\s+|my\s+|your\s+)?(?:population|city|town|village)\b"
               r"|\b(?:build|builds|building|found|plan|lay\s+out)\s+(?:a|my|the|your)\s+(?:own\s+)?(?:city|town|village|metropolis)\b"
               r"|\bpopulation\s+(?:of|to)\s+\d+")
-_DEFENDED = ("castle", "keep", "village", "base", "fort", "fortress", "citadel", "town",
-             "kingdom", "outpost", "camp", "farm", "gate", "city", "tower")
+_DEFENDED = ("station", "lighthouse", "cabin", "farmhouse", "homestead", "hut", "shrine", "temple",
+             "castle", "keep", "village", "base", "fort", "fortress", "citadel", "town",
+             "kingdom", "outpost", "camp", "farm", "gate", "city", "tower", "colony", "settlement")
 
 
 _GROUND_STOP = {"the", "a", "an", "of", "and", "or", "to", "in", "on", "at", "for", "from", "with",

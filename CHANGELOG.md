@@ -12,6 +12,11 @@ Pre-1.0 versions are internal milestones during the constraint sprint leading to
 
 ## [Unreleased]
 
+### Added: a station worth defending, and in Crystal Works where a smelter stands matters (2026-11-13)
+- **Crystal Works: build by the water, or over the heat.** A smelter beside a brook or the brine quenches its ingots in the water, and one over a glowing ember fissure is fired from below: either melts a tick faster. It says so when you look at it, lets off steam or sparks while it works, and the first one says so on screen. The rule reads the same mask the ground is drawn from, so where you see water is where it counts: about an eighth of the meadow face, a fifth of the salt faces, a fifteenth of the ember faces. A new gate (`fsite.mjs`) holds it on both builds.
+- **"Defends the station from goblins" is a defence.** It was ten goblins to kill on a bare plain: the defence rule only knew the word "defend" and a list of castles and forts. Now a hero who defends or protects a place (a station, a lighthouse, a cabin, a shrine, a camp, a settlement) from something holds it against waves, with towers to raise.
+- **A station is a field station.** It was a plaster cottage. Now it is a clad prefab under a flat roof with panels on it, a braced radio mast with its dish and a red light, a generator and fuel drums, a water tank on its stand, floodlights, a windsock, and sandbag emplacements either side of the way in, each bag its own. A research station that is defended stands outdoors instead of being a lab room with the station built inside it.
+
 ### Changed: a creek is water you can see into, stepping stones are stones, saltbush on the salt (2026-11-09)
 - **A creek is clear and running**: it was drawn as a lake, so a knee-deep creek held the whole overcast sky and read as wet concrete. Its water now shows the pebbles on its bed, takes the bed's colour at the edges and a peat darkness in the run, and its riffles catch the light in short glints.
 - **A creek bends**: between the long sweeps that bring it across the way, it now wanders a metre and a half each way every twenty metres or so, so its banks are not a canal's.

@@ -4292,6 +4292,11 @@ async function main() {
       const _kindWord = _structHit[1] === 'pyramids' ? 'pyramid' : _structHit[1];   // "the pyramids of giza" built no pyramid (2026-10-23)
       const isCastle = ['castle', 'fort', 'tower'].includes(_kindWord);
       const isLighthouse = _kindWord === 'lighthouse';   // (a 'station' goal was a lighthouse: a research station on a moor, 2026-10-12)
+      // (2026-11-13) A STATION IS A STATION: "a retired astronaut defends the station from goblins in a storm" held a
+      // plaster cottage on a bare plain. A station on the ground is a field station: a clad prefab under a flat roof
+      // with panels on it, a radio mast and its dish, a generator and fuel drums, a water tank, floodlights, a flag,
+      // and sandbag emplacements either side of the way in (the polar base builds its own)
+      const isStation = _kindWord === 'station' && !POLARBASE;
       // an East Asian temple or shrine is a pagoda (buildPagoda); any other is the ancient one
       const _tw = ((SPEC.prompt || '') + ' ' + (SPEC.world.name || '')).toLowerCase();
       const _asianT = /japan|chinese|china|asian|zen|torii|pagoda|cherry|sakura|kyoto|shinto|buddhis|tibet|himalaya|monaster|korea|bamboo/.test(_tw);
@@ -4325,7 +4330,7 @@ async function main() {
       // inside, a plank door standing ajar and a porch. The footprint, the
       // doorway and the colliders below are the ones they always were.
       const _isLog = /^(cabin|hut|lodge|shelter|den|camp|outpost)$/.test(_kindWord);
-      const _builtHouse = !isCastle && !isLighthouse && !isTemple && !_wayside;
+      const _builtHouse = !isCastle && !isLighthouse && !isTemple && !_wayside && !isStation;
       // AN ANCIENT TEMPLE IS A MONUMENT (2026-10-10): "reach an ancient temple"
       // across a red canyon ended at a cottage, the same house every goal got.
       // A temple is a stepped platform of dressed sandstone, four tiers with a
@@ -4774,6 +4779,93 @@ async function main() {
           // the tower caps are slate; the floor of the gate passage stays dark stone
           S.traverse(o => { if (o.isMesh && o.material === roofMat && o.geometry.type === 'ConeGeometry') o.material = rfM; });
         }
+      } else if (isStation) {
+        const rS = mulberry32((SPEC.seed || 1) * 37 + 911);
+        const SM = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+        // the cladding: ribbed steel panels, a little weathered at the foot
+        { const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const g = cv.getContext('2d');
+          g.fillStyle = '#d6d9d4'; g.fillRect(0, 0, 256, 128);
+          for (let x = 0; x < 256; x += 8) { g.fillStyle = 'rgba(0,0,0,0.13)'; g.fillRect(x, 0, 2, 128); g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(x + 2, 0, 1, 128); }
+          for (let x = 0; x < 256; x += 64) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x, 0, 2, 128); }
+          const gr = g.createLinearGradient(0, 96, 0, 128); gr.addColorStop(0, 'rgba(90,70,50,0)'); gr.addColorStop(1, 'rgba(90,70,50,0.35)'); g.fillStyle = gr; g.fillRect(0, 96, 256, 32);
+          const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.repeat.set(2, 1);
+          wallMat.map = t; wallMat.color.setHex(0xffffff); wallMat.roughness = 0.55; wallMat.metalness = 0.35; wallMat.userData.noAutoTex = true; wallMat.needsUpdate = true; }
+        const steelM = SM({ color: 0x8a9096, metalness: 0.6, roughness: 0.45 }), darkM = SM({ color: 0x2a2e32, metalness: 0.3, roughness: 0.6 });
+        const roofS = SM({ color: 0x5c6166, roughness: 0.8 }), panelM = SM({ color: 0x1a2a4a, metalness: 0.5, roughness: 0.25 }), redM = SM({ color: 0xff2a1a, emissive: 0xff2a1a, emissiveIntensity: 2.2 });
+        const lampM = SM({ color: 0xfff4d8, emissive: 0xfff0c8, emissiveIntensity: 2.4 }), bagM = SM({ color: 0xffffff, roughness: 0.95 }), drumM = SM({ color: 0x2f5a3a, metalness: 0.4, roughness: 0.55 });
+        const put = (geo, m, x, y, z, ry) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); if (ry) o.rotation.y = ry; o.castShadow = true; o.receiveShadow = true; S.add(o); return o; };
+        const solid = [];   // [w, h, d, x, y, z] in the station's frame
+        // the flat roof, its parapet, plant on it and a row of panels tilted to the sun
+        put(new THREE.BoxGeometry(6.9, 0.24, 5.9), roofS, 0, 3.3, 0);
+        for (const [w, d, x, z] of [[6.9, 0.14, 0, 2.9], [6.9, 0.14, 0, -2.9], [0.14, 5.9, 3.4, 0], [0.14, 5.9, -3.4, 0]]) put(new THREE.BoxGeometry(w, 0.35, d), roofS, x, 3.55, z);
+        put(new THREE.BoxGeometry(1.2, 0.8, 1.0), steelM, -2.1, 3.82, -1.6); put(new THREE.CylinderGeometry(0.35, 0.35, 0.12, 16), darkM, -2.1, 4.28, -1.6);
+        for (let k = 0; k < 3; k++) { const pn = put(new THREE.BoxGeometry(1.5, 0.05, 1.0), panelM, 0.4 + k * 1.0, 3.9, -0.4 + (k % 2) * 1.3); pn.rotation.x = -0.5;
+          put(new THREE.BoxGeometry(0.05, 0.5, 0.05), steelM, 0.4 + k * 1.0, 3.6, -0.15 + (k % 2) * 1.3); }
+        // side windows, lit, and a canopy over the door with its lamp
+        for (const sx of [-3.08, 3.08]) for (const z of [-1.2, 1.0]) { const w = put(new THREE.BoxGeometry(0.1, 0.8, 1.1), warmMat, sx * 1.002, 1.85, z); w.castShadow = false; }
+        put(new THREE.BoxGeometry(2.6, 0.1, 1.3), steelM, 0, 2.95, 3.2); put(new THREE.BoxGeometry(0.3, 0.14, 0.2), lampM, 0, 2.82, 2.75);
+        put(new THREE.BoxGeometry(2.0, 0.18, 1.0), roofS, 0, 0.09, 3.3);   // the step
+        // THE MAST: three legs braced up to nine metres, a dish on it, a red light at the top
+        { const mx = -5.6, mz = -2.6, H = 9.5, leg = [];
+          for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; leg.push([mx + Math.cos(a) * 0.55, mz + Math.sin(a) * 0.55]); }
+          for (const [lx, lz] of leg) put(new THREE.CylinderGeometry(0.04, 0.06, H, 6), steelM, lx, H / 2, lz);
+          for (let y = 0.8; y < H; y += 1.1) for (let k = 0; k < 3; k++) { const [ax, az] = leg[k], [bx, bz] = leg[(k + 1) % 3], L = Math.hypot(bx - ax, bz - az);
+            const br = put(new THREE.CylinderGeometry(0.02, 0.02, Math.hypot(L, 1.1), 4), steelM, (ax + bx) / 2, y + 0.55, (az + bz) / 2);
+            br.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(bx - ax, 1.1, bz - az).normalize()); }
+          const dish = put(new THREE.SphereGeometry(0.9, 20, 10, 0, Math.PI * 2, 0, Math.PI / 3.2), SM({ color: 0xe8eae6, roughness: 0.5, side: THREE.DoubleSide }), mx + 0.7, 6.2, mz);
+          dish.rotation.z = Math.PI / 2 + 0.35; put(new THREE.CylinderGeometry(0.03, 0.03, 0.8, 4), steelM, mx + 1.05, 6.25, mz).rotation.z = Math.PI / 2;
+          put(new THREE.SphereGeometry(0.12, 10, 8), redM, mx, H + 0.1, mz);
+          for (const yy of [H * 0.95, 7.6]) put(new THREE.BoxGeometry(0.12, 1.4, 0.12), steelM, mx - 0.2, yy, mz + 0.2);   // whip aerials
+          solid.push([1.4, H, 1.4, mx, H / 2, mz]); }
+        // THE GENERATOR: a box on skids with its louvres and exhaust, and fuel drums by it
+        { const gx = 5.2, gz = -1.4;
+          put(new THREE.BoxGeometry(2.2, 1.3, 1.2), drumM, gx, 0.8, gz); put(new THREE.BoxGeometry(2.4, 0.12, 1.3), darkM, gx, 0.1, gz);
+          for (let k = 0; k < 6; k++) put(new THREE.BoxGeometry(0.06, 0.7, 0.02), darkM, gx - 0.7 + k * 0.28, 0.85, gz + 0.61);
+          put(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 8), darkM, gx + 0.8, 1.9, gz - 0.3);
+          for (let k = 0; k < 4; k++) put(new THREE.CylinderGeometry(0.29, 0.29, 0.88, 14), k % 2 ? drumM : SM({ color: 0x8a2a1e, metalness: 0.4, roughness: 0.55 }), gx - 0.6 + (k % 2) * 0.62 + rS() * 0.05, 0.44, gz + 1.25 + Math.floor(k / 2) * 0.62);
+          solid.push([2.4, 1.5, 1.3, gx, 0.75, gz], [1.3, 0.9, 1.3, gx - 0.3, 0.45, gz + 1.55]); }
+        // THE WATER TANK on its stand
+        { const tx = 4.6, tz = -4.6;
+          for (const [dx, dz] of [[-0.7, -0.7], [0.7, -0.7], [-0.7, 0.7], [0.7, 0.7]]) put(new THREE.BoxGeometry(0.12, 2.2, 0.12), steelM, tx + dx, 1.1, tz + dz);
+          put(new THREE.CylinderGeometry(1.05, 1.05, 1.6, 20), SM({ color: 0x3a4a5a, metalness: 0.45, roughness: 0.5 }), tx, 3.0, tz);
+          solid.push([1.8, 3.8, 1.8, tx, 1.9, tz]); }
+        // FLOODLIGHTS on poles at the front corners, and the flag
+        for (const sx of [-1, 1]) { const px = sx * 4.4, pz = 3.6;
+          put(new THREE.CylinderGeometry(0.07, 0.09, 5.2, 8), steelM, px, 2.6, pz);
+          const hd = put(new THREE.BoxGeometry(0.7, 0.4, 0.25), darkM, px, 5.2, pz + 0.1); hd.rotation.x = 0.5;
+          const ln = put(new THREE.BoxGeometry(0.6, 0.3, 0.04), lampM, px, 5.15, pz + 0.24); ln.rotation.x = 0.5; ln.castShadow = false;
+          solid.push([0.3, 5.2, 0.3, px, 2.6, pz]); }
+        // A WINDSOCK, not a flag: a flag of two colour bands and a disc read as a real country's
+        { put(new THREE.CylinderGeometry(0.04, 0.05, 5.6, 8), steelM, -4.4, 2.8, -0.4);
+          const sc = document.createElement('canvas'); sc.width = 128; sc.height = 16; const sg = sc.getContext('2d');
+          for (let k = 0; k < 5; k++) { sg.fillStyle = k % 2 ? '#f4f2ec' : '#ee5a12'; sg.fillRect(k * 128 / 5, 0, 128 / 5 + 1, 16); }
+          const st2 = new THREE.CanvasTexture(sc); st2.colorSpace = THREE.SRGBColorSpace;
+          const sockG = new THREE.CylinderGeometry(0.12, 0.26, 1.7, 14, 6, true); sockG.rotateZ(Math.PI / 2); sockG.translate(-0.85, 0, 0);
+          { const sp = sockG.attributes.position, uv = sockG.attributes.uv; for (let i = 0; i < sp.count; i++) { const t = -sp.getX(i) / 1.7; sp.setY(i, sp.getY(i) - t * t * 0.35); uv.setXY(i, 1 - t, uv.getY(i)); } sockG.computeVertexNormals(); }
+          const sock = put(sockG, SM({ map: st2, side: THREE.DoubleSide, roughness: 0.85 }), -4.4, 5.45, -0.4, rS() * 6.28); sock.castShadow = false;
+          put(new THREE.TorusGeometry(0.26, 0.02, 6, 16), steelM, -4.4, 5.45, -0.4).rotation.y = Math.PI / 2 + sock.rotation.y; }
+        // SANDBAGS: two emplacements either side of the way in, a bag at a time, staggered course on course
+        // (each bag its own: a pillow with its seam pinched in, laid end to end so the joints show, every course
+        // half a bag along on the one under it)
+        { const bag = new THREE.CapsuleGeometry(0.17, 0.36, 3, 10); bag.rotateZ(Math.PI / 2);
+          { const bp = bag.attributes.position; for (let i = 0; i < bp.count; i++) { const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i), pinch = 1 - 0.28 * Math.exp(-(x * x) / 0.002);
+              bp.setXYZ(i, x, y * 0.58 * (y > 0 ? 1 : 0.8), z * pinch * (Math.abs(x) > 0.3 ? 0.85 : 1)); } bag.computeVertexNormals(); }
+          const spots = [[-1, 7.4, 6.0], [1, 7.4, 6.0]], N = 3 * 2 * 8, ib = new THREE.InstancedMesh(bag, bagM, N), d4 = new THREE.Object3D(), cB = new THREE.Color(); let n = 0;
+          for (const [sd, R, cz] of spots) { const cx = sd * R * 0.62;
+            for (let row = 0; row < 3; row++) for (let k = 0; k < 8 - (row === 2 ? 1 : 0); k++) { const step = 0.74 / 2.3, a = (k - 3.5 + (row % 2) * 0.5) * step, rr = 2.3;
+              const x = cx + Math.sin(a) * rr * -sd, z = cz + (Math.cos(a) - 1) * rr * 0.55;
+              const ry = Math.atan2(Math.sin(a) * 0.55, Math.cos(a) * -sd);   // the bag's length along the curve of the wall
+              d4.position.set(x, 0.1 + row * 0.19, z); d4.rotation.set((rS() - 0.5) * 0.08, ry + (rS() - 0.5) * 0.12, (rS() - 0.5) * 0.08); d4.updateMatrix(); ib.setMatrixAt(n, d4.matrix);
+              cB.setHex(0xa8946a).multiplyScalar(0.82 + rS() * 0.3); ib.setColorAt(n++, cB); }
+            solid.push([2.6, 0.6, 1.0, cx, 0.3, cz - 0.35]); }
+          ib.count = n; ib.castShadow = true; ib.receiveShadow = true; S.add(ib); }
+        // solid where it stands, in the world's frame
+        S.updateMatrixWorld(true);
+        const _sv = new THREE.Vector3();
+        for (const [w, h, d, x, y, z] of solid) { _sv.set(x, y, z).applyMatrix4(S.matrixWorld);
+          world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, h / 2, d / 2).setTranslation(_sv.x, _sv.y, _sv.z)
+            .setRotation({ x: 0, y: Math.sin(doorYaw / 2), z: 0, w: Math.cos(doorYaw / 2) })); }
+        window.__station = { mast: true, solids: solid.length };
       } else if (!_builtHouse) {
         const roof = new THREE.Mesh(new THREE.ConeGeometry(4.9, 2.2, 4), roofMat);
         roof.rotation.y = Math.PI / 4;
