@@ -40,6 +40,7 @@ GATES = [
     ("fcreative.mjs", "creative is its own world: all open, free, nothing runs out, survival untouched"),
     ("fspores.mjs", "spores clog unfiltered belts on green worlds; a filter within reach shields them"),
     ("fseed.mjs", "the starter line exists at every grid size and seed"),
+    ("fsite.mjs", "a smelter by the water quenches and one over a vent is fired from below: a tick faster, said in its label, counted"),
     ("fice.mjs", "ice freezes unheated seams on cold worlds; a furnace within reach thaws; the drill ignores it"),
     ("fshare.mjs", "a share link carries a factory into a fresh page; the drift is finite and pays double"),
     ("fcontract.mjs", "contracts post, count their item, pay a shard; three shards make a core; a meltdown ranks"),

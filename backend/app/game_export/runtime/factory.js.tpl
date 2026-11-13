@@ -1581,7 +1581,35 @@ function waterAt(f, a, b) {
   const m = faceUV(f), da = a - m.oa, db = b - m.ob;
   const u = (da * m.vb - db * m.va) / m.det, v = (db * m.ua - da * m.ub) / m.det;
   const x = Math.max(0, Math.min(wd.P - 1, Math.floor(u * wd.P))), y = Math.max(0, Math.min(wd.P - 1, Math.floor((1 - v) * wd.P))), k = (y * wd.P + x) * 4;
-  return [wd.d[k] / 255, wd.d[k + 2] / 255];
+  return [wd.d[k] / 255, wd.d[k + 2] / 255, wd.d[k + 1] / 255];   // water, wet bank, heat
+}
+// WHERE A SMELTER STANDS MATTERS (2026-11-13). The brooks and the brine are water now, and the ember faces'
+// fissures glow with real heat: a smelter beside water quenches each ingot in it, and one over a fissure is fired
+// from below. Either takes a tick off the melt. Read from the mask the ground's shader draws, so the rule is
+// what you can see: within a tile of the water's edge, or over the glow
+let siteTold = false, siteSmelts = 0;
+function siteOf(f, i, j) {
+  if (SPEC.city) return null;
+  let w = 0, h = 0;
+  const a0 = (i + 0.5 - N / 2) * T, b0 = (j + 0.5 - N / 2) * T;
+  // its own tile and a half-tile past each side: the water has to be at its feet, not across the field
+  for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
+    const r = waterAt(f, a0 + di * T * 0.3, b0 + dj * T * 0.3);
+    if (!r) return null;
+    if (r[0] > w) w = r[0];
+    if (Math.abs(di) <= 1 && Math.abs(dj) <= 1 && r[2] > h) h = r[2];   // the heat only right under it
+  }
+  return w > 0.3 ? 'quench' : h > 0.3 ? 'vent' : null;
+}
+function siteNote(c) {
+  if (siteTold || !c.site) return;
+  siteTold = true;
+  const fc = document.getElementById('facecap');
+  if (fc && !photo) {
+    fc.textContent = c.site === 'quench' ? 'BY THE WATER  ·  THIS SMELTER QUENCHES IN THE BROOK  ·  A TICK FASTER'
+                                         : 'OVER THE VENT  ·  THIS SMELTER IS FIRED FROM BELOW  ·  A TICK FASTER';
+    fc.classList.add('on'); captionAt = 3.2;
+  }
 }
 function meadowTexture(fp, look, ground, seed) {
   // (2026-11-05) painted at twice the pixels: everything below still works in its 1024
@@ -3662,6 +3690,7 @@ function place(face, i, j, type, dir) {
   if (!TYPE_NAME[type]) return false;
   c.buf = 0; c.bt = 0; c.fa = 0; c.fb = 0; c.cook = 0;
   if (type !== MINER && c.t === NODE) return false;      // keep nodes clear
+  c.site = type === SMELTER ? siteOf(face, i, j) : null;
   if (c.t === PROP) return false;                        // the outpost is not a build site
   dropBuild(c);
   const g = new THREE.Group();
@@ -5026,6 +5055,14 @@ function stepEmitters(dt) {
   emitClock = 0;
   eachTile((c, f, i, j) => {
     if (c.t === SMELTER && c.cook > 0) {
+      if (c.site && Math.random() < 0.7) {
+        const n3 = FACES[f].n, w3 = tileWorld(f, i, j), u3 = FACES[f].u, v3 = FACES[f].v, ra = (Math.random() - 0.5) * T * 0.9, rb = (Math.random() - 0.5) * T * 0.9;
+        const x3 = w3[0] + u3[0] * ra + v3[0] * rb + n3[0] * 0.15, y3 = w3[1] + u3[1] * ra + v3[1] * rb + n3[1] * 0.15, z3 = w3[2] + u3[2] * ra + v3[2] * rb + n3[2] * 0.15;
+        if (c.site === 'quench') emit(x3, y3, z3, n3[0] * 0.5 + (Math.random() - 0.5) * 0.3, n3[1] * 0.5 + (Math.random() - 0.5) * 0.3, n3[2] * 0.5 + (Math.random() - 0.5) * 0.3,
+                                      0.6, 0.64, 0.68, 0.22, 0.55);   // steam lifting off the water round its feet
+        else emit(x3, y3, z3, n3[0] * 1.6 + (Math.random() - 0.5) * 0.6, n3[1] * 1.6 + (Math.random() - 0.5) * 0.6, n3[2] * 1.6 + (Math.random() - 0.5) * 0.6,
+                  1.0, 0.42, 0.1, -0.03, 1.2, [-n3[0] * 3, -n3[1] * 3, -n3[2] * 3]);   // sparks up out of the fissure
+      }
       // EMBERS AT THE DOOR: the heat is where the door is. The door lamp
       // knows where that is in the world, whichever way the smelter faces.
       if (c.build && Math.random() < 0.30) {
@@ -6783,7 +6820,11 @@ function step() {
       }
     }
     if (c.t === SMELTER) {
-      if (c.cook === 0 && c.buf >= SMELT_IN) { c.buf -= SMELT_IN; c.cook = SMELT_TICKS; }
+      if (c.cook === 0 && c.buf >= SMELT_IN) {
+        c.buf -= SMELT_IN; c.site = siteOf(f, i, j);
+        c.cook = Math.max(1, SMELT_TICKS - (c.site ? 1 : 0));
+        if (c.site) { siteSmelts++; siteNote(c); }
+      }
     } else if (c.t === ASSEMBLER) {
       if (c.cook === 0 && c.ha && c.hb) { c.ha = 0; c.hb = 0; c.cook = ASSEMBLE_TICKS; }
     } else if (c.cook === 0 && c.fa && c.fb) {
@@ -9085,7 +9126,8 @@ function describeCell(c, t) {
     case SILO: return 'SILO  ·  ' + (c.buf ? c.buf + ' of ' + SILO_CAP + ', ' + stockName(c.bt, c.buf) : 'empty, takes one kind at a time')
       + '  ·  ' + (c.rr ? 'holding, press F to release' : 'releasing out of the chute, press F to hold');
     case BELT: return 'BELT  ·  heading ' + heading + (item ? '  ·  carrying a ' + item : '  ·  empty') + (c.clog > 0 ? '  ·  clogged with spores' : '');
-    case SMELTER: return 'SMELTER  ·  two ore in, one ingot out' + (c.cook > 0 ? '  ·  cooking' : c.buf > 0 ? '  ·  waiting for a second ore' : '  ·  waiting for ore');
+    case SMELTER: return 'SMELTER  ·  two ore in, one ingot out'
+      + (c.site === 'quench' ? '  ·  by the water: quenched, a tick faster' : c.site === 'vent' ? '  ·  over a vent: fired from below, a tick faster' : '') + (c.cook > 0 ? '  ·  cooking' : c.buf > 0 ? '  ·  waiting for a second ore' : '  ·  waiting for ore');
     case ASSEMBLER: return 'ASSEMBLER  ·  an alloy bar and an ingot in, one component out' + (c.cook > 0 ? '  ·  assembling' : c.ha && c.hb ? '  ·  ready' : c.ha ? '  ·  has the alloy, needs an ingot' : c.hb ? '  ·  has an ingot, needs an alloy bar' : '  ·  waiting');
     case FORGE: return 'FORGE  ·  two different ores in, one alloy out' + (c.cook > 0 ? '  ·  cooking' : (c.fa && c.fb) ? '  ·  ready' : c.fa || c.fb ? '  ·  has one ore, needs the other' : '  ·  waiting for ore');
     case HUB: return 'HUB  ·  sells what arrives, ' + FAR_PREMIUM + 'x for ingots from other faces  ·  ' + (c.took | 0) + ' of ' + HUB_INTAKE + ' taken this tick' + ((c.took | 0) >= HUB_INTAKE ? '  ·  full' : '');
@@ -11045,6 +11087,7 @@ window.__game = {
     plan: (() => { const el = document.getElementById('plan'); return el && el.classList.contains('on') ? el.textContent : null; })(),
     hubRates: [...hubLabels.values()].map(el => el.textContent),
     firstSale: lifetime.first, idleNudges, idleRing: !!(idleMark && idleMark.visible), crossLit,
+    sited: (() => { let q = 0, v = 0; eachTile(c => { if (c.t === SMELTER) { if (c.site === 'quench') q++; else if (c.site === 'vent') v++; } }); return { quench: q, vent: v, smelts: siteSmelts }; })(),
     drone: drone.visible ? { t: +droneT.toFixed(1), flights: droneFlights, pos: drone.position.toArray().map(v => +v.toFixed(2)) } : null,
     audio: { ready: AUDIO.ready, muted: AUDIO.muted,
              state: AUDIO.ctx ? AUDIO.ctx.state : null,
@@ -11143,6 +11186,7 @@ window.__factory = {
                      stars: (() => { const out = []; eachTile((c, f, i, j) => { if (c.star > 0) out.push({ f, i, j, left: c.star, t: c.t }); }); return out; })() }),
   dropStar,
   place, removeAt,      // and the placement itself, so a harness can build a factory the way a player would (2026-09-28)
+  siteOf, describeCell, get SMELT_TICKS() { return SMELT_TICKS; },
   playIntro, endIntro, showWorksCard, KitEnd,
   get nudgeClock() { return nudgeClock; }, set nudgeClock(v) { nudgeClock = v; }, get edgeNudged() { return edgeNudged; },
   audioStart, audioMute, sfxSold, sfxUnlock, sfxMelt, AUDIO,
