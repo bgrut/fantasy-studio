@@ -771,7 +771,7 @@ async function main() {
     // metres and the judge found no fog at all. At 0.9 and over (the planner's fog,
     // foggy, thick mist) it closes in from a few metres and swallows the world by
     // forty to eighty: things loom out of it as you walk
-    if (fd >= 0.88) { near = 3; far = Math.max(40, Math.min(85, SPEC.world.size_m * 0.42)); }
+    if (fd >= 0.88) { near = 3; far = Math.max(40, Math.min(85, SPEC.world.size_m * 0.42)); window.__thickFog = true; }
     scene.fog = new THREE.Fog(pal.fog, Math.max(near, 2), Math.max(far, near + 20));
   } else if (FLORA && FLORA.outer) {
     // no fog asked for: still a far haze, or the forest would stop at a line
@@ -1101,11 +1101,13 @@ async function main() {
               #else
                 float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
               #endif
-              fogFactor *= 0.62 * (1.0 - 0.4 * smoothstep(15.0, 180.0, vRP.y));
+              ${window.__thickFog ? '' : 'fogFactor *= 0.62 * (1.0 - 0.4 * smoothstep(15.0, 180.0, vRP.y));'}
               gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
             #endif`);
         };
-        mmat.customProgramCacheKey = () => 'ranges-rock';
+        // (2026-11-15) in thick fog the ranges take all of it: the world closes in at eighty metres
+        // and the haze rule that keeps a far range readable stood snowy peaks over a white bank
+        mmat.customProgramCacheKey = () => 'ranges-rock' + (window.__thickFog ? '-thick' : '');
       } catch (e) { /* the ranges keep their colour */ }
       const ring = new THREE.Group();
       const _lowland = /\b(polders?|dutch|holland|netherlands|frisian|friesland|fens?|fenland|norfolk broads)\b/.test(String(SPEC.prompt || '').toLowerCase());   // (2026-10-26) the Low Countries run flat to the sky
@@ -13496,6 +13498,11 @@ async function main() {
           const rg = window.__regionAt && window.__regionAt(x, z);
           if (rg && rg.kind === 'water' && rg.w > 0.2) return true;
           if (kind !== 'pebble' && kind !== 'flower' && pathDist(x, z) < CORR * 0.2) return true;   // the walked line (no painted trail since 2026-10-12)
+          // (2026-11-15) a farm's rows and its track are the farm's: "a botanist gathers five seeds in a
+          // lavender farm" had knee-high periwinkle stars planted down the dirt track and between the
+          // lavender, a meadow's drift laid over a field someone tends. Flowers keep off the walked line too
+          if (ROWS && kind !== 'pebble' && (ROWS.inField(x, z, 0.6) || ROWS.track(x, z) || ROWS.inYard(x, z, 0))) return true;
+          if (kind === 'flower' && pathDist(x, z) < CORR * 0.4) return true;
           return false;
         };
         const _ckTex = new THREE.TextureLoader().load('textures/cliff.jpg');
@@ -21237,6 +21244,58 @@ async function main() {
       put(g); return true;
     });
     if (!geos.length) return null;
+    // (2026-11-15) WHAT FLOATS IN A DROWNED STREET. "a pirate captain explores a sunken city" walked a
+    // clean pale sheet of water over clean paving between the ruins. Still water in an old city
+    // carries mats of algae, rafts of weed against the stones, and the timber the flood took: planks,
+    // a barrel or two, a broken beam; and the columns wear a collar of green where they meet it
+    {
+      const MATm = (o) => { const m = new THREE.MeshStandardMaterial(o); m.userData.noAutoTex = true; return m; };
+      const algae = MATm({ color: 0xffffff, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      const mats = [], wood = [], bands = [];
+      const blob = (r) => { const g = new THREE.CircleGeometry(r, 22); const pa = g.attributes.position;
+        for (let i = 1; i < pa.count; i++) { const k = 0.62 + rS() * 0.55; pa.setX(i, pa.getX(i) * k); pa.setY(i, pa.getY(i) * k); }
+        return g.rotateX(-Math.PI / 2); };
+      // mats of algae drift into the lee of the walls and columns: most of them near stone
+      tries(90, () => {
+        const near = cols.length && rS() < 0.7 ? cols[Math.floor(rS() * cols.length)] : null;
+        const a = rS() * Math.PI * 2, d = near ? near[2] + 0.4 + rS() * 3.5 : 0;
+        const x = near ? near[0] + Math.cos(a) * d : (rS() - 0.5) * 2 * R, z = near ? near[1] + Math.sin(a) * d : (rS() - 0.5) * 2 * R;
+        if (pathDist(x, z) < CORR * 0.5 || hAt(x, z) > WL - 0.05) return false;
+        // a raft is a cluster of small lumpy pieces, not one big polygon (one alone read as a cut-out)
+        const c = new THREE.Color().setHSL(0.19 + rS() * 0.07, 0.3 + rS() * 0.2, 0.06 + rS() * 0.05);
+        const nb = 3 + Math.floor(rS() * 5), spread = 0.4 + rS() * 1.0;
+        for (let b = 0; b < nb; b++) {
+          const g = blob(0.18 + rS() * 0.55); g.scale(1, 1, 0.5 + rS() * 0.7); g.rotateY(rS() * Math.PI);
+          g.translate(x + (rS() - 0.5) * 2 * spread, WL + 0.028 + b * 0.002, z + (rS() - 0.5) * 2 * spread);
+          const ca = new Float32Array(g.attributes.position.count * 3);
+          for (let i = 0; i < g.attributes.position.count; i++) { const e = i === 0 ? 1.2 : 0.7 + rS() * 0.35; ca[i * 3] = c.r * e; ca[i * 3 + 1] = c.g * e; ca[i * 3 + 2] = c.b * e; }
+          g.setAttribute('color', new THREE.BufferAttribute(ca, 3));
+          mats.push(g.toNonIndexed());
+        }
+        return true;
+      });
+      // the flood's timber: planks, a beam, a barrel, lying on the water
+      tries(26, () => {
+        const x = (rS() - 0.5) * 2 * R, z = (rS() - 0.5) * 2 * R;
+        if (pathDist(x, z) < CORR * 0.6 || hAt(x, z) > WL - 0.08) return false;
+        const k = rS(), ry = rS() * Math.PI;
+        let g;
+        if (k < 0.62) g = new THREE.BoxGeometry(1.2 + rS() * 1.4, 0.06, 0.18 + rS() * 0.12).rotateZ((rS() - 0.5) * 0.06).translate(0, 0.0, 0);
+        else if (k < 0.82) g = new THREE.BoxGeometry(2.6 + rS() * 1.6, 0.22, 0.24).rotateX(0.04).translate(0, -0.05, 0);
+        else g = new THREE.CylinderGeometry(0.3, 0.3, 0.86, 14).rotateZ(Math.PI / 2).translate(0, 0.02, 0);
+        wood.push(g.rotateY(ry).translate(x, WL, z).toNonIndexed()); return true;
+      });
+      // a weed collar where each standing column meets the water
+      for (const c of cols) if (c.length <= 4 && c[2] < 1) {
+        const y = WL - 0.05;
+        if (hAt(c[0], c[1]) - 0.6 > y) continue;
+        bands.push(new THREE.CylinderGeometry(c[2] * 0.97, c[2] * 1.12, 0.32, 16, 1, true).translate(c[0], y + 0.1, c[1]).toNonIndexed());
+      }
+      if (mats.length) { const m = new THREE.Mesh(mergeGeometries(mats, false), algae); algae.vertexColors = true; m.receiveShadow = true; m.renderOrder = 2; G.add(m); }
+      if (wood.length) { const m = new THREE.Mesh(mergeGeometries(wood, false), MATm({ map: HDT('planks', 1, 1), color: 0x6a5440, roughness: 0.9 })); m.castShadow = true; m.receiveShadow = true; G.add(m); }
+      if (bands.length) { const m = new THREE.Mesh(mergeGeometries(bands, false), MATm({ color: 0x31401f, roughness: 0.95, side: THREE.DoubleSide })); G.add(m); }
+      window.__sunkenFloat = { algae: mats.length, timber: wood.length, collars: bands.length };
+    }
     const mesh = new THREE.Mesh(mergeGeometries(geos, false), stoneM);
     mesh.castShadow = true; mesh.receiveShadow = true; G.add(mesh);
     // solid where it stands

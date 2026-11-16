@@ -176,6 +176,20 @@ _NAMES = ["Ines", "Tomasz", "Adaeze", "Ruairi", "Mei", "Kofi", "Sigrun", "Teodor
           "Kai", "Marisol", "Anselm", "Tove", "Ravi", "Odile", "Bram", "Esme", "Joaquin", "Hana", "Cormac", "Zainab"]
 
 
+# (2026-11-15) "a botanist gathers five seeds in a lavender farm" was told as "Captain Thorne's
+# log, 1888": the seed handed an inland farm a ship's log. A log or a captain's orders belong
+# where there is a ship, a sea or a station to keep one
+_AFLOAT = re.compile(r"\b(seas?|ocean\w*|ships?|boats?|harbou?rs?|coast\w*|islands?|pirates?|sail\w*|captains?|"
+                     r"stations?|space\w*|lighthouses?|ports?|reefs?|underwater|sunken|diver?s?|submarine\w*|navy|fleet|crew)\b", re.I)
+
+
+def _forms_for(prompt: str, modern: bool) -> list:
+    forms = _FORMS_OLD if _OLD.search(prompt or '') and not modern else _FORMS
+    if not _AFLOAT.search(prompt or ''):
+        forms = [f for f in forms if "log" not in f and "captain" not in f]
+    return forms
+
+
 def write_story(spec, prompt: str, verbose: bool = True) -> dict:
     """The story for a fresh build. Never raises; falls back to a composed one."""
     obs = [{"kind": _shown_kind(o), "label": getattr(o, "label", ""), "count": getattr(o, "count", 1)}
@@ -195,7 +209,7 @@ def write_story(spec, prompt: str, verbose: bool = True) -> dict:
             f"Setting notes: sky {getattr(spec.world, 'sky', '')}, weather {getattr(spec.world, 'weather', '')}, "
             f"world {getattr(spec.world, 'name', '')}\n"
             f"{era}"
-            f"Tell it as {random.Random(seed).choice(_FORMS_OLD if _OLD.search(prompt or '') and not modern else _FORMS)}; the first person named in it is "
+            f"Tell it as {random.Random(seed).choice(_forms_for(prompt, modern))}; the first person named in it is "
             f"{random.Random(seed * 7 + 1).choice(_NAMES)} (other names for anyone else).\n"
             "Each beat must be about ITS objective exactly, the same verb and the same thing named, in-world. "
             "first_move must point toward the first objective. Never invent a task, an item to collect or a step "

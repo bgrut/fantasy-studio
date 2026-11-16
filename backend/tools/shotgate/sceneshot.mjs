@@ -38,6 +38,8 @@ const shots = {
   // their head, and their hair filled the frame like a tiled boulder
   eye: { pos: [geo.pp[0] + dx / dl * 1.5, geo.pp[1] + 1.7, geo.pp[2] + dz / dl * 1.5], look: [geo.pp[0] + dx / dl * 60, geo.pp[1] + 3, geo.pp[2] + dz / dl * 60] },
   high: { pos: [geo.pp[0] - dx / dl * 20, geo.pp[1] + 40, geo.pp[2] - dz / dl * 20], look: [geo.g[0], 0, geo.g[1]] },
+  // (2026-11-15) the hero from the front, near enough to judge a made character's face and clothes
+  hero: { pos: [geo.pp[0] + dx / dl * 2.6 + dz / dl * 0.8, geo.pp[1] + 1.55, geo.pp[2] + dz / dl * 2.6 - dx / dl * 0.8], look: [geo.pp[0], geo.pp[1] + 1.15, geo.pp[2]] },
 };
 if (geo.falls) {
   const f = geo.falls, ex = geo.pp[0] - f[0], ez = geo.pp[2] - f[2], el = Math.hypot(ex, ez) || 1;

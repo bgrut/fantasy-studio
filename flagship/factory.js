@@ -3115,6 +3115,47 @@ const GEO = {
     { g: new THREE.TorusGeometry(0.16, 0.035, 10, 40), y: 1.62, x: T * 0.22, z: -T * 0.22, rx: Math.PI / 2, col: PAINT.trim },  // flue lip
   ], { base: 0x6e605a }),
 
+  // A SITED SMELTER WEARS ITS SITE (2026-11-15). One by the water quenched a
+  // tick faster and looked like every other smelter: you had to read its
+  // label to know. Now it hangs a riveted quench tank on its back, fed by a
+  // spout out of the furnace, with the tongs left across the rim; one over a
+  // fissure stands on a firebrick kerb with a grate round its feet and the
+  // vent's glow coming up between the bars (see 'vent' in place()).
+  quenchKit: mergeParts([
+    { g: _box(0.19, 0.03, 1.12), y: 0.145, x: -0.89 },                                   // floor
+    { g: _bevelBox(0.026, 0.30, 1.12), y: 0.28, x: -0.975 },                             // outer wall
+    { g: _bevelBox(0.026, 0.30, 1.12), y: 0.28, x: -0.805 },                             // inner wall
+    { g: _bevelBox(0.19, 0.30, 0.026), y: 0.28, x: -0.89, z: 0.55 },
+    { g: _bevelBox(0.19, 0.30, 0.026), y: 0.28, x: -0.89, z: -0.55 },
+    { g: _box(0.02, 0.035, 1.15), y: 0.215, x: -0.99, col: PAINT.dark, tint: 0.8 },      // two hoops
+    { g: _box(0.02, 0.035, 1.15), y: 0.375, x: -0.99, col: PAINT.dark, tint: 0.8 },
+    ...[-0.36, 0, 0.36].map(z => ({ g: _box(0.022, 0.30, 0.045), y: 0.28, x: -0.992, z, col: PAINT.dark, tint: 0.7 })),   // straps
+    ...[-0.36, 0, 0.36].flatMap(z => [0.215, 0.375].map(y => ({ g: _cyl(0.012, 0.012, 0.012, 10), y, x: -1.004, z, rz: Math.PI / 2, col: PAINT.steel, tint: 0.8 }))),   // rivets
+    { g: _box(0.07, 0.13, 0.07), y: 0.065, x: -0.95, z: 0.44, col: PAINT.chassis },     // feet past the skirt
+    { g: _box(0.07, 0.13, 0.07), y: 0.065, x: -0.95, z: -0.44, col: PAINT.chassis },
+    { g: _cyl(0.034, 0.034, 0.17, 16), y: 0.64, x: -0.875, rz: Math.PI / 2, col: PAINT.chassis },   // the spout out of the back
+    { g: _cyl(0.034, 0.034, 0.17, 16), y: 0.565, x: -0.93, col: PAINT.chassis },                   // and down over the water
+    { g: new THREE.TorusGeometry(0.036, 0.008, 6, 20), y: 0.48, x: -0.93, rx: Math.PI / 2, col: PAINT.dark },   // its lip
+    { g: _cyl(0.007, 0.007, 0.07, 6), y: 0.69, x: -0.86, col: PAINT.dark },                         // valve stem
+    { g: new THREE.TorusGeometry(0.04, 0.008, 6, 22), y: 0.725, x: -0.86, rx: Math.PI / 2, col: PAINT.trim },   // valve wheel
+    { g: _cyl(0.008, 0.006, 0.6, 8), y: 0.44, x: -0.87, z: 0.05, rx: Math.PI / 2, ry: 0.06, col: PAINT.steel, tint: 0.7 },   // tongs across the rim
+    { g: _cyl(0.008, 0.006, 0.6, 8), y: 0.44, x: -0.91, z: 0.05, rx: Math.PI / 2, ry: -0.05, col: PAINT.steel, tint: 0.7 },
+  ], { base: 0x4c4642 }),
+  ventKit: mergeParts([
+    // the firebrick kerb round the grate, and the grate itself: bars across
+    // the slot between the smelter's skirt and the kerb, on all four sides
+    { g: _bevelBox(0.05, 0.06, 1.98), y: 0.03, x: 0.965, col: 0x7a3a26 },
+    { g: _bevelBox(0.05, 0.06, 1.98), y: 0.03, x: -0.965, col: 0x7a3a26 },
+    { g: _bevelBox(1.88, 0.06, 0.05), y: 0.03, z: 0.965, col: 0x7a3a26 },
+    { g: _bevelBox(1.88, 0.06, 0.05), y: 0.03, z: -0.965, col: 0x7a3a26 },
+    ...Array.from({ length: 9 }, (_, k) => -0.8 + k * 0.2 + ((k * 37) % 7 - 3) * 0.012).flatMap(t => [
+      { g: _box(0.05, 0.026, 0.03), y: 0.035, x: 0.915, z: t, col: PAINT.dark },
+      { g: _box(0.05, 0.026, 0.03), y: 0.035, x: -0.915, z: t, col: PAINT.dark },
+      { g: _box(0.03, 0.026, 0.05), y: 0.035, z: 0.915, x: t, col: PAINT.dark },
+      { g: _box(0.03, 0.026, 0.05), y: 0.035, z: -0.915, x: t, col: PAINT.dark },
+    ]),
+  ], { base: 0x2a2624 }),
+
   split: mergeParts([
     // (2026-10-17) round where it turns: the skirt was an octagon, the hub cap too
     { g: _cyl(T * 0.50, T * 0.50, 0.09, 48), y: 0.045, col: PAINT.chassis }, // skirt
@@ -3664,9 +3705,15 @@ function weather(g, face) {
     o.userData.weathered = soot ? 'soot' : rime ? 'rime' : 'under';
   });
 }
+var _QUENCH_MAT = null;
+function QUENCH_MAT() {
+  if (!_QUENCH_MAT) _QUENCH_MAT = new THREE.MeshStandardMaterial({ color: 0x35606a, roughness: 0.04, metalness: 0.2, envMapIntensity: 1.8 });
+  return _QUENCH_MAT;
+}
 function dropBuild(c) {
   if (!c.build) return;
-  c.build.traverse(o => { if (o.userData.weathered && o.geometry) o.geometry.dispose(); });
+  c.build.traverse(o => { if (o.userData.weathered && o.geometry) o.geometry.dispose();
+                          if (o.userData.ownMat) { o.material.dispose(); if (o.geometry) o.geometry.dispose(); } });
   scene.remove(c.build); c.build = null;
 }
 var _SWEEP_MAT = null;
@@ -3838,6 +3885,23 @@ function place(face, i, j, type, dir) {
     lamp.position.set(fx + 0.022, 0.5, 0);
     lamp.name = 'lamp';
     g.add(lamp);
+    if (c.site === 'quench') {
+      const kit = new THREE.Mesh(GEO.quenchKit, MAT.smelt);
+      kit.castShadow = true; kit.receiveShadow = true; g.add(kit);
+      // dark still water with the sky in it; the steam comes off this
+      const w = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 1.074), QUENCH_MAT());
+      w.rotation.x = -Math.PI / 2; w.position.set(-0.89, 0.39, 0); w.name = 'quench'; w.receiveShadow = true;
+      g.add(w);
+    } else if (c.site === 'vent') {
+      const kit = new THREE.Mesh(GEO.ventKit, MAT.smelt);
+      kit.receiveShadow = true; g.add(kit);
+      // the slot under the bars: lit from below, brighter while it melts
+      const sh = new THREE.Shape([new THREE.Vector2(-0.94, -0.94), new THREE.Vector2(0.94, -0.94), new THREE.Vector2(0.94, 0.94), new THREE.Vector2(-0.94, 0.94)]);
+      sh.holes.push(new THREE.Path([new THREE.Vector2(-0.89, -0.89), new THREE.Vector2(-0.89, 0.89), new THREE.Vector2(0.89, 0.89), new THREE.Vector2(0.89, -0.89)]));
+      const vg = new THREE.Mesh(new THREE.ShapeGeometry(sh), new THREE.MeshBasicMaterial({ color: 0x8a2a0a, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+      vg.rotation.x = -Math.PI / 2; vg.position.y = 0.014; vg.name = 'vent'; vg.userData.ownMat = true;
+      g.add(vg);
+    }
 
   }
   if (!CITY_T.has(type)) weather(g, face);   // soot on the ember faces, rime on the salt, dimmer below
@@ -5063,7 +5127,15 @@ function stepEmitters(dt) {
     if (c.t === SMELTER && c.cook > 0) {
       if (c.site && Math.random() < 0.7) {
         const n3 = FACES[f].n, w3 = tileWorld(f, i, j), u3 = FACES[f].u, v3 = FACES[f].v, ra = (Math.random() - 0.5) * T * 0.9, rb = (Math.random() - 0.5) * T * 0.9;
-        const x3 = w3[0] + u3[0] * ra + v3[0] * rb + n3[0] * 0.15, y3 = w3[1] + u3[1] * ra + v3[1] * rb + n3[1] * 0.15, z3 = w3[2] + u3[2] * ra + v3[2] * rb + n3[2] * 0.15;
+        let x3 = w3[0] + u3[0] * ra + v3[0] * rb + n3[0] * 0.15, y3 = w3[1] + u3[1] * ra + v3[1] * rb + n3[1] * 0.15, z3 = w3[2] + u3[2] * ra + v3[2] * rb + n3[2] * 0.15;
+        // from the fitting when it has one: off the tank's water, or up
+        // between the grate's bars on a random side
+        if (c.build && c.build.getObjectByName(c.site)) {
+          const s = Math.random() * 1.8 - 0.9, sd = Math.random() < 0.5 ? -0.915 : 0.915;
+          if (c.site === 'quench') _lw.set(-0.89, 0.42, (Math.random() - 0.5) * 1.0);
+          else if (Math.random() < 0.5) _lw.set(sd, 0.05, s); else _lw.set(s, 0.05, sd);
+          c.build.localToWorld(_lw); x3 = _lw.x; y3 = _lw.y; z3 = _lw.z;
+        }
         if (c.site === 'quench') emit(x3, y3, z3, n3[0] * 0.5 + (Math.random() - 0.5) * 0.3, n3[1] * 0.5 + (Math.random() - 0.5) * 0.3, n3[2] * 0.5 + (Math.random() - 0.5) * 0.3,
                                       0.6, 0.64, 0.68, 0.22, 0.55);   // steam lifting off the water round its feet
         else emit(x3, y3, z3, n3[0] * 1.6 + (Math.random() - 0.5) * 0.6, n3[1] * 1.6 + (Math.random() - 0.5) * 0.6, n3[2] * 1.6 + (Math.random() - 0.5) * 0.6,
@@ -6847,6 +6919,9 @@ function step() {
       else lamp.material.color.setRGB(0.10 + 0.90 * c.glow,
                                  0.06 + 0.63 * c.glow,
                                  0.22 + 0.07 * c.glow);
+      // a vent is never cold: it smoulders between melts and flares in one
+      const vg = c.site === 'vent' && c.build.getObjectByName('vent');
+      if (vg) vg.material.color.setRGB(0.9 + 0.5 * c.glow, 0.3 + 0.42 * c.glow, 0.06 + 0.12 * c.glow);
     }
   });
 

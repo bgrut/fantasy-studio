@@ -542,6 +542,18 @@ def _build_reference_prompt(slots: Dict[str, Any], style: str) -> tuple[str, str
             "gladiator": "gladiator, roman segmented armor, helmet, shield",
             "barbarian": "barbarian warrior, fur clothing, leather straps, muscular",
             "pirate":    "pirate, tricorn hat, long coat, sash, fantasy",
+            # (2026-11-15) five heroes from the benchmark's own list had no figure and no
+            # outfit, so they were played by stand-ins: "a pirate captain" by the explorer in
+            # safari khaki, "a botanist" by the forest ranger. Each is dressed here
+            # (the first came out a white marble bust: a powdered wig and pale skin, the 1700s coat
+            # read as a colonial portrait; the skin, the hair and the beard lead now)
+            "pirate captain": "a pirate captain with a sun-tanned weathered face showing, tanned skin, long dark brown hair tied back and a short dark brown beard, no wig, a black felt tricorn hat, a long deep red wool frock coat with brass buttons and wide turned-back cuffs, a white linen shirt, a wide brown leather belt with a brass buckle over a faded sash, dark breeches tucked into tall black leather boots, holding nothing, fully clothed, normal proportions",
+            "captain":   "a ship's captain with a weathered bearded face showing, a navy peaked cap, a navy double-breasted wool pea coat with brass buttons, a cream roll-neck sweater, dark trousers and black leather boots, holding nothing, fully clothed, normal proportions",
+            "botanist":  "a botanist with a calm friendly face showing, natural skin, mouth closed, tied-back brown hair, a pale linen field shirt with rolled sleeves under a sage green canvas work vest with many pockets, khaki trousers, sturdy brown walking boots, a small leather satchel strap across the chest, a woven straw sun hat, holding nothing, fully clothed, normal proportions",
+            "florist":   "a florist with a warm smiling face showing and hair tied up, a cream cotton blouse with rolled sleeves under a long olive green canvas apron with a front pocket, dark trousers, brown leather ankle boots, holding nothing, fully clothed, normal proportions",
+            "paleontologist": "a paleontologist with a sunburnt face showing, a dusty tan cotton work shirt with rolled sleeves, a faded red neckerchief, brown canvas work trousers with knee pads, worn leather work boots, a tool belt with a rock hammer and brushes at the hip, a pale canvas bucket hat, holding nothing, fully clothed, normal proportions",
+            "nomad":     "a desert nomad with a weathered face showing, an indigo cotton head wrap with the face uncovered, a long sand-coloured layered robe over loose trousers, a woven striped sash, a leather shoulder bag, worn leather sandals, holding nothing, fully clothed, normal proportions",
+            "scout":     "a young scout with a cheerful face showing, a khaki short-sleeved uniform shirt with patches on the sleeves and a knotted green neckerchief, olive shorts, knee socks and brown hiking boots, a small canvas backpack, holding nothing, fully clothed, normal proportions",
             "king":      "king, royal robe with fur trim, golden crown",
             "queen":     "queen, elegant royal gown, crown",
             "monk":      "monk, simple hooded robe, rope belt",

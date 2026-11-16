@@ -1190,11 +1190,13 @@ function farMaterial(atlas, row, U) {
           #else
             float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
           #endif
-          fogFactor *= mix(1.0, 0.62 * (1.0 - 0.4 * smoothstep(15.0, 180.0, vBase.y)), smoothstep(4.0, 24.0, vBase.y));
+          ${(typeof window !== 'undefined' && window.__thickFog) ? '' : 'fogFactor *= mix(1.0, 0.62 * (1.0 - 0.4 * smoothstep(15.0, 180.0, vBase.y)), smoothstep(4.0, 24.0, vBase.y));'}
           gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, fogFactor);
         #endif`);
   };
-  m.customProgramCacheKey = () => 'flora-far-' + row;
+  // (2026-11-15) thick fog swallows the far forest whole: "in the fog" stood a ring of pale cut-out
+  // pines on the hills above a white bank, their tops let off the haze like a clear day's ranges
+  m.customProgramCacheKey = () => 'flora-far-' + row + ((typeof window !== 'undefined' && window.__thickFog) ? '-thick' : '');
   return m;
 }
 

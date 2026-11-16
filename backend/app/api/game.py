@@ -1417,6 +1417,38 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                     job.setdefault("notes", []).append("zero gravity: the hero floats (Space up, C down)")
             except Exception as _ze:
                 job.setdefault("notes", []).append(f"zero-g rule skipped: {_ze}")
+            # ONE TOMB IS ONE (2026-11-15): "a knight explores a sunken city to find a hidden tomb" came back
+            # from the planner as collect 5 "a hidden tombs", the HUD reading "Collect 5 a hidden tombs" and
+            # five glowing pickups for a building. A label never carries its article, and a single place the
+            # sentence goes to find (a tomb, a shrine, a door, a spring) is reached, not gathered by fives
+            try:
+                for _o in spec.objectives:
+                    _lb = (_o.label or "").strip()
+                    _art = _fre.match(r"^(?:a|an)\s+(.+)$", _lb, _fre.I)
+                    if _art:
+                        _o.label = _lb = _art.group(1)
+                    if _o.kind != "collect" or not _lb:
+                        continue
+                    _head = _lb.lower().split()[-1]
+                    _sing = _head[:-1] if _head.endswith("s") and not _head.endswith("ss") else _head
+                    if (_sing in ("tomb", "shrine", "door", "doorway", "garden", "spring", "observatory", "temple", "chapel", "vault",
+                                 "cave", "grotto", "chamber", "crypt", "gate", "library", "city", "village", "lighthouse", "tower")
+                            and _fre.search(r"\b(?:find|finds|finding|discover\w*|uncover\w*|locate\w*|reach\w*|seek\w*|search(?:es|ing)? for)\s+(?:a|an|the)\s+(?:[a-z-]+\s+){0,2}" + _sing + r"\b", (req.prompt or "").lower())):
+                        _words = _lb.split()
+                        _words[-1] = _sing
+                        job.setdefault("notes", []).append(f"collect {_o.count} '{_lb}' -> reach the {' '.join(_words)} (the sentence finds one)")
+                        _o.kind, _o.label, _o.count, _o.asset = "reach", " ".join(_words), 1, None
+                _rseen, _dd = set(), []
+                for _o in spec.objectives:          # and once: a planner's own "reach hidden tomb" is the same step
+                    _k = (_o.label or "").lower().split()[-1] if _o.kind == "reach" and (_o.label or "").strip() else None
+                    if _k and _k in _rseen:
+                        continue
+                    if _k:
+                        _rseen.add(_k)
+                    _dd.append(_o)
+                spec.objectives = _dd
+            except Exception as _oe:
+                job.setdefault("notes", []).append(f"one-place rule skipped: {_oe}")
             # NOTHING TO REACH THAT IS ALREADY IN HAND (2026-10-07): "finds the
             # missing diamond" ended on "reach the diamond" after collecting it.
             try:
@@ -2615,7 +2647,8 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
             # (2026-10-25) the sentence's own words for its hero: "a tightrope walker" came back from the
             # planner as "walker" and was played by the ranger. A compound role the sentence names with
             # the planner's word as its head is that role
-            _cm = _fre.search(r"\b((?:tightrope|high[- ]wire|street|hot dog|food|fruit|flower|ice cream|newspaper|market|fish|rope|wire|sword|fire)\s+" + _fre.escape(_w) + r")\b", (req.prompt or "").lower()) if _w and " " not in _w else None
+            # (2026-11-15) "a pirate captain" came back as "captain" and was the explorer in safari khaki
+            _cm = _fre.search(r"\b((?:tightrope|high[- ]wire|street|hot dog|food|fruit|flower|ice cream|newspaper|market|fish|rope|wire|sword|fire|pirate)\s+" + _fre.escape(_w) + r")\b", (req.prompt or "").lower()) if _w and " " not in _w else None
             if _cm and not req.player and not library.resolve(_w):   # a "vendor" already made plays the hot dog vendor
                 _w = _cm.group(1); want = _w; spec.player.name = _w
                 job.setdefault("notes", []).append(f"hero: '{_w}', as the sentence names them")
@@ -3296,6 +3329,39 @@ def _run_job(job_id: int, req: GameExportRequest) -> None:
                 if _hre.search(r"\b(misty|mist|foggy|fog|hazy|haze)\b", _hp) and (spec.world.fog_density or 0) < 0.7:
                     spec.world.fog_density = 0.7
                     spec.world.fog = True
+                # (2026-11-15) FOG IS DAYTIME AIR: "a pirate captain explores a sunken city to find a hidden
+                # tomb in the fog" was planned at night, a navy starry sky over a grey fog bank with the far
+                # pines standing black above it. Fog the sentence names, with no hour and nothing of the
+                # dark, is a grey day
+                if (spec.world.sky == "night" and _hre.search(r"\b(fog\w*|mist\w*)\b", _hp)
+                        and not _hre.search(r"\b(night\w*|midnight|moon\w*|stars?|starry|dark\w*|dusk|twilight|evening|haunt\w*|ghosts?|spooky|horror|graveyard|cemetery|vampires?|halloween|werewol\w*|zombies?|witching|lanterns?|lamps?)\b", _hp)):
+                    job.setdefault("notes", []).append("sky night -> overcast (fog is daytime air; the sentence names no dark)")
+                    spec.world.sky = "overcast"
+                    _greyday = True
+                # and a day of thick fog has no blue in it: the same sentence by day stood a fog bank under
+                # a clear blue sky of fair-weather clouds, the far pines cut out flat at its top edge
+                elif (spec.world.sky == "day" and _hre.search(r"\b(fog|foggy|fogbound|thick mist|pea soup)\b", _hp)
+                        and not _hre.search(r"\b(sun\w*|clear|blue sky|bright|noon|midday|summer)\b", _hp)):
+                    job.setdefault("notes", []).append("sky day -> overcast (a foggy day is grey)")
+                    spec.world.sky = "overcast"
+                    _greyday = True
+                else:
+                    _greyday = False
+                if _greyday:
+                    # the planner's palette came with the old sky (a navy sky, a low blue moon, exposure
+                    # 0.7), and the knight's drowned city stood under stars with the sky named overcast
+                    try:
+                        from app.game_export.spec import PaletteSpec as _PSf
+                        _pf = spec.world.palette
+                        if _pf is not None:
+                            _pf = _PSf(**_pf) if isinstance(_pf, dict) else _pf
+                            _pf.sky, _pf.fog, _pf.sun_color = "#939ca2", "#a3aaaf", "#f2efe6"   # (under 0.62 lightness: paler is "deepened" to blue below)
+                            _pf.ambient = max(_pf.ambient or 0, 0.5)
+                            _pf.exposure = max(_pf.exposure or 0, 0.95)
+                            _pf.sun_elevation_deg = max(_pf.sun_elevation_deg or 0, 35.0)
+                            spec.world.palette = _pf
+                    except Exception as _pfe:
+                        job.setdefault("notes", []).append(f"fog palette left: {_pfe}")
                 # (2026-10-21) fog is not haze: "in the fog" at 0.7 was clear for the first
                 # 35 m; fog, foggy and a thick mist close the world in (the runtime reads 0.9+)
                 if _hre.search(r"\b(fog|foggy|fogbound|thick mist|pea soup|whiteout)\b", _hp) and not _hre.search(r"\bfog(?:horn|lights?)\b", _hp):
